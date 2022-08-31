@@ -1,0 +1,76 @@
+---
+title: "Course project"
+output: html_document
+date: "`r Sys.Date()`"
+---
+#Summary
+Predict the manner of exercise based on the data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants.
+There are 5 types of activity and it is labeled as A, B, C, D, and E.
+This "classe" variable is stored in the training dataset.
+Build a model to predict the types of activity based on the training dataset using rpart, gbm, and rf model and use the best model (gbm) to predict 20 different test cases.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(dplyr)
+library(RANN)
+```
+
+## R Markdown
+Read data
+```{r, echo=FALSE}
+training <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+test <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+Remove character variables which are names.
+Remove variables which contains NA.
+Remove variable X because it is just an index.
+Divide data set to training set and test set
+```{r}
+training2 <- training %>% select(-where(is.character))
+training2 <- cbind(classe = training$classe, training2)
+training2 <- training2 %>% select(where(~!any(is.na(.))))
+training2 <- select(training2, -X)
+intrain <- createDataPartition(training2$classe, p=0.7, list = FALSE)
+trainset <- training2[intrain,]
+testset <- training2[-intrain,]
+```
+
+
+Random forest can not be done with this computer without reduction.
+Breaks set into 10-folds for resampling and allow parallel computation to reduce computation time.
+Use rpart, gbm, and rf to build models.
+```{r}
+fitControl <- trainControl(method = "cv", number = 10, allowParallel = TRUE)
+fit1 <- train(classe ~., method = "rpart", data = trainset)
+fit2 <- train(classe ~., method = "gbm", data = trainset, trControl = fitControl, verbose = FALSE)
+fit3 <- train(classe ~., method = "rf", data = trainset, preProcess="pca", trControl = fitControl, tuneGrid=data.frame(mtry=3))
+```
+
+Validation using testset
+```{r}
+pred1 <- predict(fit1, newdata = testset)
+pred2 <- predict(fit2, newdata = testset)
+pred3 <- predict(fit3, newdata = testset)
+table(testset$classe, pred1)
+table(testset$classe, pred2)
+table(testset$classe, pred3)
+```
+
+Accurary of each model
+```{r}
+tree_accuracy <- sum(pred1 == testset$classe) / length(pred1)
+gbm_accuracy <- sum(pred2 == testset$classe) / length(pred2)
+forest_accuracy <- sum(pred3 == testset$classe) / length(pred3)
+accuracy <- data.frame(tree_accuracy = tree_accuracy, gbm_accuracy = gbm_accuracy, forest_accuracy=forest_accuracy)
+print(accuracy)
+```
+
+gbm is the most accurate and rpart is the least accurate.
+
+Use gbm to predict test data
+```{r}
+predict(fit2, test)
+```
